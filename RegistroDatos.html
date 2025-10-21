@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Registro de Llamadas</title>
+    <style>
+        :root {
+            --bg: #0b1220;
+            --panel: #25272b;
+            --muted: #ffffff;
+            --text: #e6e9ef;
+            --acc: #4f46e5;
+            --acc-2: #22c55e;
+            --danger: #ef4444;
+            --warn: #f59e0b;
+            --bd: #808183;
+            --chip: #0f172a;
+            --ok: #16a34a
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html,
+        body {
+            height: 100%
+        }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, var(--bg), #0d1424 40%, #0b1323);
+            color: var(--text);
+            font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial
+        }
+
+        .wrap {
+            max-width: 1100px;
+            margin: 32px auto;
+            padding: 0 16px
+        }
+
+        .card {
+            background: radial-gradient(1200px 500px at -10% -10%, rgba(79, 70, 229, .12), transparent 50%), linear-gradient(180deg, rgba(255, 255, 255, .02), rgba(255, 255, 255, .02)), var(--panel);
+            border: 1px solid var(--bd);
+            border-radius: 18px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, .35)
+        }
+
+        .card-hd {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--bd)
+        }
+
+        .card-hd h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700
+        }
+
+        .grid {
+            display: grid;
+            gap: 14px;
+            padding: 18px 22px
+        }
+
+        .grid.cols-2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr))
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px
+        }
+
+        .label {
+            font-size: 18px;
+            color: var(--muted);
+            letter-spacing: .2px
+        }
+
+        input[type="text"],
+        input[type="datetime-local"],
+        input[type="date"],
+        textarea,
+        select {
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid var(--bd);
+            color: var(--text);
+            border-radius: 12px;
+            padding: 10px 12px;
+            outline: none;
+            transition: .2s ease
+        }
+
+        textarea {
+            min-height: 84px;
+            resize: vertical
+        }
+
+        input[readonly],
+        .readonly {
+            opacity: .8
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            border-color: var(--acc);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, .18)
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap
+        }
+
+        .btn {
+            appearance: none;
+            border: 1px solid var(--bd);
+            background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .04));
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: .2s;
+            display: inline-flex;
+            gap: 8px;
+            align-items: center
+        }
+
+        .btn:hover {
+            transform: translateY(-1px)
+        }
+
+        .btn:active {
+            transform: translateY(0)
+        }
+
+        .btn.primary {
+            border-color: #3b40d8;
+            background: linear-gradient(180deg, rgba(79, 70, 229, .28), rgba(79, 70, 229, .18))
+        }
+
+        .btn.success {
+            border-color: #178143;
+            background: linear-gradient(180deg, rgba(34, 197, 94, .28), rgba(34, 197, 94, .18))
+        }
+
+        .btn.warn {
+            border-color: #d97706;
+            background: linear-gradient(180deg, rgba(245, 158, 11, .28), rgba(245, 158, 11, .18))
+        }
+
+        .btn.ghost {
+            background: transparent
+        }
+
+        .badge {
+            font-size: 11px;
+            border: 1px solid var(--bd);
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: var(--chip);
+            color: #cbd5e1
+        }
+
+        .subtle {
+            color: var(--muted)
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, .02);
+            border: 1px solid var(--bd);
+            border-radius: 14px;
+            padding: 14px
+        }
+
+        .alert-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center
+        }
+
+        .hidden {
+            display: none !important
+        }
+
+        .divider {
+            height: 1px;
+            background: var(--bd);
+            margin: 8px 0 0
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 22px;
+            border-top: 1px solid var(--bd)
+        }
+
+        @media (max-width:680px) {
+            .grid.cols-2 {
+                grid-template-columns: 1fr
+            }
+
+            .footer {
+                flex-direction: column;
+                gap: 12px;
+                align-items: stretch
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <div class="card" id="formCard">
+            <div class="card-hd">
+                <h1>Registro de datos – Llamada entrante</h1>
+                <span class="badge" id="identityBadge" title="IDENTITY">ID: —</span>
+            </div>
+
+            <!-- Datos de llamada (2 columnas) -->
+            <div class="grid cols-2">
+                <div class="field"><label class="label">ID LLAMADA</label><input id="idLlamada" type="text"
+                        placeholder="ID desde Genesys" readonly></div>
+                <div class="field"><label class="label">ID USER</label><input id="idUser" type="text"
+                        placeholder="Asesor" readonly></div>
+                <div class="field"><label class="label">GRUPO COLA</label><input id="grupoCola" type="text"
+                        placeholder="Cola ACD" readonly></div>
+                <div class="field"><label class="label">CELULAR CLIENTE</label><input id="numeroIn" type="text"
+                        placeholder="9********"></div>
+                <div class="field"><label class="label">DNI</label><input id="dni" type="text" placeholder="DNI"
+                        inputmode="numeric" maxlength="15"></div>
+                <div class="field"><label class="label">FECHA DE LLAMA</label><input id="fechaIn" type="datetime-local"
+                        readonly></div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Datos del cliente -->
+            <div class="grid cols-2">
+                <div class="field"><label class="label">Nombre del cliente</label><input id="nombre" type="text"
+                        placeholder="Nombre y Apellidos"></div>
+                <div class="field"><label class="label">Correo</label><input id="correo" type="text"
+                        placeholder="correo@dominio.com"></div>
+
+                <div class="field"><label class="label">Teléfono 2</label><input id="telefono2" type="text"
+                        placeholder="Opcional"></div>
+                <div class="field"><label class="label">Fecha de nacimiento</label><input id="fechaNac" type="date">
+                </div>
+
+                <!-- DNI 2 a lo ancho -->
+                <div class="field field-dni2" style="grid-column:1/-1">
+                    <label class="label">DNI 2</label>
+                    <div class="row">
+                        <input id="dni2" type="text" placeholder="DNI para consulta" inputmode="numeric" maxlength="15"
+                            style="flex:1">
+                        <button class="btn primary" id="btnActualizarDni"
+                            title="Actualizar datos del cliente">Actualizar DNI</button>
+                    </div>
+                </div>
+
+                <!-- Dirección y Observaciones a lo ancho -->
+                <div class="field" style="grid-column:1/-1"><label class="label">Dirección</label><input id="direccion"
+                        type="text" placeholder="Calle / Av. / N° / Distrito"></div>
+                <div class="field" style="grid-column:1/-1"><label class="label">Observaciones</label><textarea id="obs"
+                        placeholder="Notas del asesor"></textarea></div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Alerta -->
+            <div class="grid cols-2">
+                <div class="field">
+                    <label class="label">Alerta previa</label>
+                    <div class="alert-controls">
+                        <select id="alerta" aria-label="Alerta previa">
+                            <option value="no">No</option>
+                            <option value="si">Sí</option>
+                        </select>
+                        <button class="btn warn hidden" id="btnVerDetalle">Ver detalle</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Panel detalle de alerta (campos como los demás) -->
+            <div class="grid" id="alertaPanel" style="display:none">
+                <div class="panel">
+                    <div class="row" style="justify-content:space-between">
+                        <strong>Detalle de alerta</strong>
+                        <button class="btn ghost" id="btnOcultarDetalle">Ocultar</button>
+                    </div>
+                    <!-- NUEVO: campos en 2 columnas -->
+                    <div class="grid cols-2" id="alertaCampos" style="margin-top:12px"></div>
+                </div>
+            </div>
+
+            <div class="footer">
+                <div class="row subtle">
+                </div>
+                <div class="row">
+                    <button class="btn" id="btnLimpiar">Limpiar</button>
+                    <button class="btn success" id="btnGuardar">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inputs ocultos requeridos por el JS -->
+    <input id="fechaFin" type="hidden" />
+    <input id="identity" type="hidden" />
+    <input id="fechaEnvio" type="hidden" />
+
+    <script>
+        const CONFIG = { API_BASE: "http://10.6.20.49/api", TIMEOUT_MS: 10000, ALERT_LOOKBACK_HOURS: 48 };
+        const $ = s => document.querySelector(s); const $$ = s => Array.from(document.querySelectorAll(s));
+        function toast(msg, icon = "💾") { const t = $("#toast"); $("#toastMsg").textContent = msg; $("#toastIcon").textContent = icon; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
+        function showModal(id) { $(id).style.display = "flex" } function hideModal(id) { $(id).style.display = "none" }
+
+        function formToPayload() {
+            const safe = id => ($(id) || { value: "" }).value;
+            return {
+                IDLLAMADA: $("#idLlamada").value.trim(),
+                IDUSER: $("#idUser").value.trim(),
+                GRUPO_COLA: $("#grupoCola").value.trim(),
+                NUMERO_IN: $("#numeroIn").value.trim(),
+                DNI: $("#dni").value.trim(),
+                DNI_2: $("#dni2").value.trim(),
+                FECHA_IN: $("#fechaIn").value,
+                FECHA_FIN: safe("#fechaFin"),
+                NOMBRE_CLIENTE: $("#nombre").value.trim(),
+                TELEFONO2: $("#telefono2").value.trim(),
+                CORREO: $("#correo").value.trim(),
+                FECHA_NACIMIENTO: $("#fechaNac").value,
+                DIRECCION: $("#direccion").value.trim(),
+                OBSERVACIONES: $("#obs").value.trim(),
+                ALERTA: $("#alerta").value === "si",
+                IDENTITY: safe("#identity").trim?.() || safe("#identity"),
+                FECHA_ENVIO: safe("#fechaEnvio"),
+            }
+        }
+
+        function patchReadonlyFromBDUC(fields) {
+            const map = { NOMBRE_CLIENTE: "#nombre", CORREO: "#correo", FECHA_NACIMIENTO: "#fechaNac", DIRECCION: "#direccion" };
+            Object.keys(fields).forEach(k => { const sel = map[k]; if (!sel) return; const el = $(sel); el.setAttribute("readonly", "readonly"); el.classList.add("readonly"); });
+        }
+        function fillFields(d) {
+            if (d.NOMBRE_CLIENTE !== undefined) $("#nombre").value = d.NOMBRE_CLIENTE ?? "";
+            if (d.CORREO !== undefined) $("#correo").value = d.CORREO ?? "";
+            if (d.FECHA_NACIMIENTO !== undefined) $("#fechaNac").value = d.FECHA_NACIMIENTO ?? "";
+            if (d.DIRECCION !== undefined) $("#direccion").value = d.DIRECCION ?? "";
+        }
+        function diffRecords(cur, prop) { const keys = ["NOMBRE_CLIENTE", "CORREO", "FECHA_NACIMIENTO", "DIRECCION"], ch = []; keys.forEach(k => { const a = cur[k] ?? "", b = prop[k] ?? ""; if (String(a) !== String(b)) ch.push({ key: k, old: a, new: b }); }); return ch; }
+        function renderDiff(ch) { const nameMap = { NOMBRE_CLIENTE: "Nombre", CORREO: "Correo", FECHA_NACIMIENTO: "F. Nacimiento", DIRECCION: "Dirección" }; const o = $("#diffOld"), n = $("#diffNew"); o.innerHTML = ""; n.innerHTML = ""; if (!ch.length) { o.innerHTML = n.innerHTML = "<div class='subtle'>No hay diferencias</div>"; return } ch.forEach(c => { const k = nameMap[c.key] || c.key; const a = document.createElement("div"); a.className = "diff-item"; a.innerHTML = `<span class="diff-key">${k}</span><span class="diff-old">${c.old || "—"}</span>`; const b = document.createElement("div"); b.className = "diff-item"; b.innerHTML = `<span class="diff-key">${k}</span><span class="diff-new">${c.new || "—"}</span>`; o.appendChild(a); n.appendChild(b); }); }
+        async function api(path, { method = 'GET', body } = {}) { const ctrl = new AbortController(); const id = setTimeout(() => ctrl.abort(), CONFIG.TIMEOUT_MS); try { const res = await fetch(`${CONFIG.API_BASE}${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: ctrl.signal }); if (!res.ok) throw new Error(`HTTP ${res.status}`); return await res.json() } catch (e) { $("#apiStatus").textContent = `Error: ${e.message}`; throw e } finally { clearTimeout(id) } }
+
+        // Simulaciones
+        async function fetchClientePorDni(dni) { await new Promise(r => setTimeout(r, 600)); return { NOMBRE_CLIENTE: "Cliente Demo " + dni.slice(-3), CORREO: `cliente${dni.slice(-3)}@dominio.com`, FECHA_NACIMIENTO: "1992-07-15", DIRECCION: "Av. Siempre Viva 742 • Demo", fuente: "BDUC" }; }
+        async function buscarAlertaPorDni(dni) { await new Promise(r => setTimeout(r, 500)); const has = Number(dni.slice(-1)) % 2 === 0; return has ? { tieneAlerta: true, detalle: [{ fecha: "2025-10-20 16:10", tipo: "Incidencia", nota: "Cliente reportó intento de suplantación" }, { fecha: "2025-10-21 09:05", tipo: "Seguimiento", nota: "Pendiente validación adicional" }] } : { tieneAlerta: false, detalle: [] }; }
+        async function guardarFormulario(p) { await new Promise(r => setTimeout(r, 700)); return { ok: true, identity: crypto.randomUUID?.() || (Date.now() + "-ID"), fechaEnvio: new Date().toISOString(), monto: (Math.random() * 900 + 100).toFixed(2) }; }
+
+        const state = { proposedBDUC: null, diff: [] };
+
+        function initPrefill() {
+            const qs = new URLSearchParams(location.search);
+            const m = (id, k) => { const v = qs.get(k); if (v) $(id).value = v; }
+            m('#dni', 'dni'); m('#dni2', 'dni2'); m('#nombre', 'nombre'); m('#numeroIn', 'numero');
+            $("#idLlamada").value = qs.get('idLlamada') || `LL-${Math.floor(Math.random() * 1e6)}`;
+            $("#idUser").value = qs.get('idUser') || 'asesor.demo';
+            $("#grupoCola").value = qs.get('cola') || 'COLA-01';
+            const now = new Date(); $("#fechaIn").value = new Date(now.getTime() - 2 * 60 * 1000).toISOString().slice(0, 16);
+        }
+
+        async function onActualizarDni() {
+            const dni2 = $("#dni2").value.trim(); if (!dni2) { toast("Ingresa un DNI para consultar", "⚠️"); return; }
+            $("#apiStatus").textContent = "Consultando BDUC…";
+            try {
+                const proposed = await fetchClientePorDni(dni2);
+                state.proposedBDUC = proposed;
+                const current = formToPayload();
+                const subset = { NOMBRE_CLIENTE: proposed.NOMBRE_CLIENTE, CORREO: proposed.CORREO, FECHA_NACIMIENTO: proposed.FECHA_NACIMIENTO, DIRECCION: proposed.DIRECCION };
+                state.diff = diffRecords(current, subset); renderDiff(state.diff); showModal('#modalDiff');
+            } catch (e) { toast("No fue posible consultar BDUC", "❌"); }
+            finally { $("#apiStatus").textContent = "Listo"; }
+        }
+
+        function applyBDUC() {
+            if (!state.proposedBDUC) return;
+            const subset = { NOMBRE_CLIENTE: state.proposedBDUC.NOMBRE_CLIENTE, CORREO: state.proposedBDUC.CORREO, FECHA_NACIMIENTO: state.proposedBDUC.FECHA_NACIMIENTO, DIRECCION: state.proposedBDUC.DIRECCION };
+            fillFields(subset); patchReadonlyFromBDUC(subset);
+            toast("Datos actualizados desde BDUC. Algunos campos ahora son de solo lectura", "ℹ️");
+            hideModal('#modalDiff'); $("#apiStatus").innerHTML = "Actualizado desde BDUC: Nombre, Correo, F. Nac., Dirección (readonly)";
+        }
+
+        async function onDniChangeAlertCheck() {
+            const dni = $("#dni").value.trim(); if (!dni) return;
+            try {
+                const r = await buscarAlertaPorDni(dni);
+                $("#alerta").value = r.tieneAlerta ? 'si' : 'no';
+                $("#btnVerDetalle").classList.toggle('hidden', !r.tieneAlerta);
+            } catch (e) { }
+        }
+
+        function showAlertaDetalle() {
+            const payload = formToPayload();
+            const wrap = $("#alertaCampos");
+
+            wrap.innerHTML = `
+            <div class="field"><label class="label">IDLLAMADA</label>
+            <input id="idLlamadaDet" type="text" value="${payload.IDLLAMADA || ''}">
+            </div>
+
+            <div class="field"><label class="label">IDUSER (ASESOR)</label>
+            <input id="idUserDet" type="text" value="${payload.IDUSER || ''}">
+            </div>
+
+            <div class="field"><label class="label">TIPO_VALIDACION</label>
+            <select id="tipoValidacionDet">
+                <option value="">Selecciona…</option>
+                <option value="biometrico">Biométrico</option>
+                <option value="agente">Agente</option>
+            </select>
+            </div>
+
+            <div class="field"><label class="label">ACCION_LLAMADA – tipificación</label>
+            <select id="accionLlamadaDet">
+                <option value="">Selecciona…</option>
+                <option>Consulta General</option>
+                <option>Actualización de datos</option>
+                <option>Validación de identidad</option>
+                <option>Derivación</option>
+            </select>
+            </div>
+
+            <div class="field"><label class="label">detalle acción – tipificación 2</label>
+            <input id="tipif2Det" type="text" placeholder="Detalle adicional">
+            </div>
+
+            <div class="field"><label class="label">IDENTITY</label>
+            <input id="identityDet" type="text" value="${payload.IDENTITY || ''}" readonly>
+            </div>
+
+            <div class="field"><label class="label">FECHA_ENVIO</label>
+            <input id="fechaEnvioDet" type="datetime-local" value="${(payload.FECHA_ENVIO || '').slice(0, 16)}" readonly>
+            </div>
+
+            <div class="field"><label class="label">MONTO</label>
+            <input id="montoDet" type="text" value="" readonly>
+            </div>`;
+
+            // Inicializa selects usando el payload (si en el futuro los agregas al payload, se setearán)
+            $("#tipoValidacionDet").value = payload.TIPO_VALIDACION || "";
+            $("#accionLlamadaDet").value = payload.ACCION_LLAMADA || "";
+
+            $("#alertaPanel").style.display = "block";
+        }
+
+        function hideAlertaDetalle() { $("#alertaPanel").style.display = "none"; }
+
+        async function onGuardar() {
+            const payload = formToPayload();
+            if (!payload.DNI && !payload.DNI_2) { toast("Debes ingresar DNI o DNI_2", "⚠️"); return; }
+            $("#apiStatus").textContent = "Guardando…";
+            try {
+                const r = await guardarFormulario(payload);
+                if (r.ok) {
+                    $("#identity").value = r.identity; $("#identityBadge").textContent = `ID: ${r.identity}`;
+                    $("#fechaEnvio").value = (r.fechaEnvio || new Date().toISOString()).slice(0, 16);
+                    if (r.monto && $("#montoDet")) { $("#montoDet").value = r.monto; }
+
+                    // si el panel está abierto, refleja los readonly visibles
+                    if ($("#alertaPanel").style.display !== "none") {
+                        const vFecha = $("#fechaEnvio").value;
+                        $("#identityDet") && ($("#identityDet").value = r.identity);
+                        $("#fechaEnvioDet") && ($("#fechaEnvioDet").value = vFecha);
+                    }
+
+                    toast("Formulario guardado correctamente", "✅");
+                    setTimeout(() => { window.close(); if (!document.hidden) { $("#formCard").style.filter = "grayscale(1)"; $$('input,textarea,select,button').forEach(el => el.disabled = true); $("#apiStatus").textContent = "Guardado. Puedes cerrar esta ventana."; } }, 500);
+                } else { toast("No se pudo guardar", "❌"); }
+            } catch (e) { toast("Error al guardar", "❌"); }
+            finally { $("#apiStatus").textContent = "Listo"; }
+        }
+
+        function onAlertaChange() {
+            const valor = document.querySelector("#alerta").value;
+            const botonDetalle = document.querySelector("#btnVerDetalle");
+            const panelDetalle = document.querySelector("#alertaPanel");
+
+            // Mostrar u ocultar el botón según el valor del select
+            if (valor === "si") {
+                botonDetalle.classList.remove("hidden");
+            } else {
+                botonDetalle.classList.add("hidden");
+                panelDetalle.style.display = "none";
+            }
+        }
+
+        function onLimpiar() {
+            $$('#formCard input:not([readonly]), #formCard textarea').forEach(el => el.value = "");
+            $("#alerta").value = "no";
+            onAlertaChange();
+            hideAlertaDetalle();
+            toast("Formulario limpio", "🧹");
+        }
+
+        // Eventos
+        $("#btnActualizarDni").addEventListener('click', onActualizarDni);
+
+        $("#dni").addEventListener('change', onDniChangeAlertCheck);
+        $("#alerta").addEventListener('change', onAlertaChange);
+        $("#btnVerDetalle").addEventListener('click', showAlertaDetalle);
+        $("#btnOcultarDetalle").addEventListener('click', hideAlertaDetalle);
+        $("#btnGuardar").addEventListener('click', onGuardar);
+        $("#btnLimpiar").addEventListener('click', onLimpiar);
+
+        // Inicio
+        initPrefill(); onAlertaChange();
+    </script>
+</body>
+
+</html>
