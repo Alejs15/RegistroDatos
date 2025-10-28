@@ -5,119 +5,122 @@ https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
 
 <script>
 (() => {
-  /* ================== CONFIG ================== */
+  // ================== CONFIG ==================
   const API_BASE = "https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api";
-  // Si tus APIs requieren Authorization, pega aquí el token (o déjalo vacío si no aplica)
-  const AUTH_TOKEN = ""; // "eyJhbGciOi..."  ← opcional
 
-  /* Maestros locales (solo para la UI; no se llaman APIs de catálogo) */
-  const ACCIONES_SALIENTE = [
-    { id: 1, nombre: "CONTACTADO" },
-    { id: 2, nombre: "NO CONTESTA" },
-    { id: 3, nombre: "BUZÓN" }
-  ];
-  const ESTADOS_LLAMADA = [
-    { id: 1, nombre: "Concluida" },
-    { id: 2, nombre: "En proceso" },
-    { id: 3, nombre: "Abandonada" }
-  ];
-  const ESTADOS_ALERTA = [
-    { id: 1, nombre: "Nueva" },
-    { id: 2, nombre: "En revisión" },
-    { id: 3, nombre: "Resuelta" }
-  ];
+  // Credenciales por defecto (puedes sobreescribirlas vía URL ?user=&pass=)
+  const LOGIN_USER = new URLSearchParams(location.search).get("user") || "lvalera";
+  const LOGIN_PASS = new URLSearchParams(location.search).get("pass") || "12345678";
 
-  /* ================== HELPERS ================== */
-  const pad = (n) => String(n).padStart(2, "0");
-  const toLocalInputDateTime = (d = new Date()) =>
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // ================== AUTH ==================
+  let AUTH_HEADERS = {};       // se completa tras login
+  let _authToken = null;       // guarda el JWT/Token
+  let _isLoggingIn = null;     // evita carreras de login concurrentes
 
-  function getParam(k) {
-    const sp = new URLSearchParams(location.search);
-    const v = sp.get(k) || sp.get("@" + k) || sp.get(k.toUpperCase()) || sp.get(k.toLowerCase());
-    return v ? decodeURIComponent(String(v).replace(/\+/g, " ")) : "";
+  function _extractToken(json) {
+    // Acepta varios formatos posibles de respuesta
+    if (!json || typeof json !== "object") return null;
+    return (
+      json.token ||
+      json.access_token ||
+      json.accessToken ||
+      json.jwt ||
+      (json.data && (json.data.token || json.data.access_token)) ||
+      null
+    );
   }
 
-  function hhmmss(d) {
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
+  async function login() {
+    if (_isLoggingIn) return _isLoggingIn;  // reusa la promesa en curso
 
-  /* ================== FETCH WRAPPER ================== */
-  async function fetchJson(url, opts = {}) {
-    const headers = { ...(opts.headers || {}) };
-    if (!headers["Content-Type"] && opts.method && opts.method !== "GET") {
-      headers["Content-Type"] = "application/json";
-    }
-    if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
+    const url = `${API_BASE}/Autenticacion/Autenticar`;
+    const body = { usuario: LOGIN_USER, contrasena: LOGIN_PASS };
 
-    const res = await fetch(url, { ...opts, headers });
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} - ${url}\n${t}`);
-    }
-    return res.json().catch(() => ({}));
-  }
-
-  /* ================== ENDPOINTS QUE SÍ USAMOS ================== */
-  async function crearLlamadaOut(bodyInput = {}) {
-    const payload = {
-      id_llamada: (bodyInput.id_llamada ?? document.getElementById("idllamada")?.value ?? "").trim(),
-      telefono_llamada: (bodyInput.telefono_llamada ?? document.getElementById("numero_in")?.value ?? "").trim(),
-      agente: (bodyInput.agente ?? document.getElementById("iduser")?.value ?? "").trim(),
-      cola: (bodyInput.cola ?? document.getElementById("grupo_cola")?.value ?? "").trim(),
-      fecha_inicio: (bodyInput.fecha_inicio ?? document.getElementById("fecha_in")?.value ?? "").replace(" ", "T")
-    };
-
-    try {
-      const json = await fetchJson(`${API_BASE}/Llamada/CrearLlamadaSaliente`, {
+    _isLoggingIn = (async () => {
+      const res = await fetch(url, {
         method: "POST",
-        body: JSON.stringify(payload)
-      });
-      if (json && json.codigo_llamada) {
-        window.COD_LLAMADA_OUT = json.codigo_llamada;
-        const id = document.getElementById("idllamada"); if (id) id.value = json.codigo_llamada;
-      } else {
-        window.COD_LLAMADA_OUT = payload.id_llamada;
-      }
-      const pill = document.getElementById("statusPill");
-      if (pill) { pill.className = "pill ok"; pill.innerHTML = "<strong>Estado:</strong> Llamada creada"; }
-      return json;
-    } catch (err) {
-      console.warn("CrearLlamadaSaliente error:", err);
-      const pill = document.getElementById("statusPill");
-      if (pill) { pill.className = "pill warn"; pill.innerHTML = "<strong>Estado:</strong> Error al crear llamada"; }
-      alert("No se pudo crear la llamada.\n" + err.message);
-      return null;
-    }
-  }
-
-  async function terminarLlamadaOut(payload) {
-    const body = {
-      codigo_llamada: payload.COD_LLAMADA_OUT,
-      fecha_fin: new Date(payload.FECHA_FIN || new Date()).toISOString(),
-      nombre_cliente: payload.NOMBRE_CLIENTE || null,
-      telefono_cliente: payload.TELEFONO2 || null,
-      correo_cliente: payload.CORREO || null,
-      fecha_nacimiento_cliente: payload.FECHA_NACIMIENTO || null,
-      direccion_cliente: payload.DIRECCION || null,
-      observaciones: payload.OBSERVACIONES || null,
-      id_detalle_llamada: payload.ID_FRAU_DETALLE_SUB_ACCION_LLAMADA ?? null,
-      id_estado_llamada: payload.ID_FRAU_TIPO_VALIDACION ?? null,
-      numero_intentos: payload.NRO_INTENTO ?? 0
-    };
-    try {
-      const json = await fetchJson(`${API_BASE}/Llamada/ActualizarLlamadaSaliente`, {
-        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      return json;
-    } catch (e) {
-      console.warn("ActualizarLlamadaSaliente error:", e);
-      alert("No se pudo actualizar la llamada.\n" + e.message);
-      return null;
+      if (!res.ok) throw new Error(`Login HTTP ${res.status}`);
+      const json = await res.json().catch(() => ({}));
+      const tk = _extractToken(json);
+      if (!tk) throw new Error("No se recibió token en Autenticar.");
+
+      _authToken = tk;
+      AUTH_HEADERS = { Authorization: `Bearer ${_authToken}` };
+      return tk;
+    })();
+
+    try {
+      return await _isLoggingIn;
+    } finally {
+      _isLoggingIn = null;
     }
   }
 
+  async function ensureAuth() {
+    if (_authToken) return _authToken;
+    return login();
+  }
+
+  // fetch con Authorization + reintento en 401
+  async function fetchJson(url, opts = {}, _retried = false) {
+    await ensureAuth(); // asegura token cargado
+
+    const headers = {
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+      ...AUTH_HEADERS
+    };
+
+    const res = await fetch(url, { ...opts, headers });
+
+    if (res.status === 401 && !_retried) {
+      // token expiró o inválido: reloguea y reintenta una vez
+      _authToken = null;
+      AUTH_HEADERS = {};
+      await login();
+      return fetchJson(url, opts, true);
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} - ${url}`);
+    }
+    try { return await res.json(); } catch { return {}; }
+  }
+
+  // ================== HELPERS UI ==================
+  const pad = (n) => String(n).padStart(2, "0");
+  const toLocalInputDateTime = (d = new Date()) =>
+    `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const hhmmss = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const byId = (id) => document.getElementById(id);
+  function getParam(k) {
+    const sp = new URLSearchParams(location.search);
+    const v = sp.get(k) || sp.get("@"+k) || sp.get(k.toUpperCase()) || sp.get(k.toLowerCase());
+    return v ? decodeURIComponent(String(v).replace(/\+/g, " ")) : "";
+  }
+  function toastEstado(ok, msgOk, msgErr) {
+    const pill = byId("statusPill");
+    if (!pill) return;
+    pill.className = "pill " + (ok ? "ok" : "warn");
+    pill.innerHTML = `<strong>Estado:</strong> ${ok ? msgOk : msgErr}`;
+  }
+
+  // ================== SOLO TUS 4 ENDPOINTS ==================
+  async function crearLlamadaSaliente(body) {
+    return fetchJson(`${API_BASE}/Llamada/CrearLlamadaSaliente`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+  }
+  async function actualizarLlamadaSaliente(body) {
+    return fetchJson(`${API_BASE}/Llamada/ActualizarLlamadaSaliente`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+  }
   async function crearAlerta(body) {
     return fetchJson(`${API_BASE}/Alerta/CrearAlerta`, {
       method: "POST",
@@ -125,71 +128,58 @@ https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
     });
   }
 
-  async function actualizarEstadoAlerta(body) {
-    // { codigo_llamada, codigo_alerta, id_estado_alerta }
-    return fetchJson(`${API_BASE}/Alerta/ActualizarEstadoAlerta`, {
-      method: "POST",
-      body: JSON.stringify(body)
-    });
-  }
+  // ================== ESTADO GLOBAL ==================
+  const PENDING_ALERTS = []; // alertas apiladas
+  let frm;
 
-  /* ================== UI: CATÁLOGOS LOCALES ================== */
-  function llenarSelectLocal(selId, items, valueField = "id", textField = "nombre", first = "Seleccione…") {
-    const sel = document.getElementById(selId);
+  // ================== MODAL "Datos de gestión" ==================
+  function ensureMgEstadosOptions() {
+    const sel = byId("mg_estadoalerta");
     if (!sel) return;
-    sel.innerHTML = `<option value="">${first}</option>`;
-    (items || []).forEach(x => {
-      const opt = document.createElement("option");
-      opt.value = x[valueField];
-      opt.textContent = x[textField];
-      sel.appendChild(opt);
-    });
+    const hasReal = Array.from(sel.options).some(o => o.value && o.value !== "" && o.textContent !== "Cargando…");
+    if (!hasReal) {
+      sel.innerHTML = "";
+      [["","Seleccione estado de alerta…"],["1","Pendiente"],["2","Enviado"]].forEach(([v,t])=>{
+        const opt = document.createElement("option");
+        opt.value = v; opt.textContent = t; sel.appendChild(opt);
+      });
+    }
   }
-
-  /* ================== MODAL GESTIÓN / ALERTAS ================== */
-  const PENDING_ALERTS = []; // cola para crear en lote
-
-  const bkGestion = () => document.getElementById("bkGestion");
-  const openGestion = () => bkGestion()?.classList.add("show");
-  const closeGestion = () => bkGestion()?.classList.remove("show");
-
   function prefillGestion() {
-    const get = id => document.getElementById(id);
-    if (get("mg_idllamada")) get("mg_idllamada").value = get("idllamada")?.value || "";
-    if (get("mg_iduser")) get("mg_iduser").value = get("iduser")?.value || "";
-    if (get("mg_dni")) get("mg_dni").value = get("dni")?.value || "";
-    if (get("mg_identity")) get("mg_identity").value = "";
-    if (get("mg_fechaenvio")) get("mg_fechaenvio").value = toLocalInputDateTime(new Date());
-    // estados de alerta locales
-    llenarSelectLocal("mg_estadoalerta", ESTADOS_ALERTA, "id", "nombre", "Seleccione estado de alerta…");
-    // autoselecciona la primera real
-    const sel = get("mg_estadoalerta");
-    if (sel && sel.options.length > 1) sel.selectedIndex = 1;
+    ensureMgEstadosOptions();
+    byId("mg_idllamada").value = byId("idllamada")?.value || "";
+    byId("mg_iduser").value    = byId("iduser")?.value || "";
+    byId("mg_dni").value       = byId("dni")?.value || "";
+    byId("mg_identity").value  = "";
+    byId("mg_fechaenvio").value = toLocalInputDateTime(new Date());
   }
+  function openGestion()  { byId("bkGestion")?.classList.add("show"); }
+  function closeGestion() { byId("bkGestion")?.classList.remove("show"); }
 
   function buildAlertaFromModal() {
-    const idLlamada = (document.getElementById("mg_idllamada")?.value || "").trim();
-    const idUser = (document.getElementById("mg_iduser")?.value || "").trim();
-    const dni = (document.getElementById("mg_dni")?.value || "").replace(/[^\d]/g, "");
-    const identity = (document.getElementById("mg_identity")?.value || "").trim();
-    const fechaIn = document.getElementById("mg_fechaenvio")?.value;
-    const selEstado = document.getElementById("mg_estadoalerta");
-    const idEstado = selEstado ? Number(selEstado.value) : null;
-    const txtEstado = selEstado?.options[selEstado.selectedIndex]?.textContent || "";
-    const montoStr = (document.getElementById("mg_monto")?.value || "").trim();
-    const monto = montoStr ? Number(montoStr.replace(",", ".")) : null;
+    const idLlamada = (byId("mg_idllamada").value || "").trim();
+    const idUser    = (byId("mg_iduser").value || "").trim(); // solo UI
+    const dni       = (byId("mg_dni").value || "").replace(/[^\d]/g, "");
+    const identity  = (byId("mg_identity").value || "").trim();
+    const fechaVal  = byId("mg_fechaenvio").value;
+    const sel       = byId("mg_estadoalerta");
+    const idEstado  = sel ? Number(sel.value) : null;
+    const txtEstado = sel?.options[sel.selectedIndex]?.textContent || "";
+    const montoStr  = (byId("mg_monto").value || "").trim();
+    const monto     = montoStr ? String(Number(montoStr.replace(",", "."))) : "";
 
-    const d = fechaIn ? new Date(String(fechaIn).replace(" ", "T")) : new Date();
+    const d = fechaVal ? new Date(String(fechaVal).replace(" ","T")) : new Date();
     const iso = d.toISOString();
+    const hora = hhmmss(d);
 
     return {
-      // payload exacto de CrearAlerta
+      // Payload EXACTO para /Alerta/CrearAlerta
       codigo_llamada: idLlamada,
       identidad: identity,
       fecha_envio: iso,
-      hora_envio: hhmmss(d),
+      hora_envio: hora,
       fecha_transaccion: iso,
-      hora_transaccion: hhmmss(d),
+      hora_transaccion: hora,
       nro_documento: dni,
       nro_cuenta: "",
       nro_tarjeta: "",
@@ -203,7 +193,8 @@ https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
       indicador_alerta: "",
       canal: "WEB",
       id_estado_alerta: idEstado,
-      // campos solo UI
+
+      // Solo UI
       _id_user: idUser,
       _estado_text: txtEstado,
       _status: "Pendiente"
@@ -211,10 +202,10 @@ https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
   }
 
   function renderGestiones() {
-    const tbd = document.querySelector("#gestionesTable tbody") || document.querySelector("#attemptsTable tbody");
-    if (!tbd) return;
-    tbd.innerHTML = "";
-    for (const g of PENDING_ALERTS) {
+    const tbody = byId("tblGestionBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    PENDING_ALERTS.forEach((g, idx) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${g.codigo_llamada}</td>
@@ -224,80 +215,75 @@ https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
         <td>${new Date(g.fecha_envio).toLocaleString()}</td>
         <td>${g._estado_text || g.id_estado_alerta || ""}</td>
         <td>${g.importe_transaccion ?? ""}</td>
-        <td>${g._status || "Pendiente"}</td>`;
-      tbd.appendChild(tr);
-    }
-  }
-
-  async function enviarAlertasPendientes() {
-    if (!PENDING_ALERTS.length) return { ok: true, total: 0, okCount: 0 };
-    const results = await Promise.allSettled(PENDING_ALERTS.map(a => crearAlerta(a)));
-    let okCount = 0;
-    results.forEach((r, i) => {
-      if (r.status === "fulfilled") {
-        okCount++;
-        PENDING_ALERTS[i]._status = "OK";
-        PENDING_ALERTS[i]._codigo_alerta = r.value?.codigo_alerta || "";
-      } else {
-        PENDING_ALERTS[i]._status = "ERROR";
-      }
+        <td><button class="btn ghost" type="button" data-del="${idx}">Eliminar</button></td>`;
+      tbody.appendChild(tr);
     });
-    renderGestiones();
-    return { ok: okCount === PENDING_ALERTS.length, total: PENDING_ALERTS.length, okCount };
-  }
-
-  /* ================== PREFILL + CREAR LLAMADA ================== */
-  async function prefillFromURLAndCreate() {
-    const NOMBRE_AGENTE   = getParam("NOMBRE_AGENTE") || getParam("agente");
-    const NUMERO_IN       = getParam("NUMERO_IN") || getParam("telefono_llamada");
-    const DNI             = getParam("DNI");
-    const NOMBRE_GRUPO    = getParam("NOMBRE_GRUPO_COLA") || getParam("cola");
-    const FECHA_INI       = getParam("FECHA_INI") || getParam("fecha_inicio");
-
-    if (NOMBRE_AGENTE) { const el = document.getElementById("iduser"); if (el) el.value = NOMBRE_AGENTE; }
-    if (NUMERO_IN) { const el = document.getElementById("numero_in"); if (el) el.value = NUMERO_IN; }
-    if (DNI) { const el = document.getElementById("dni"); if (el) el.value = DNI; }
-    if (NOMBRE_GRUPO) { const el = document.getElementById("grupo_cola"); if (el) el.value = NOMBRE_GRUPO; }
-    if (FECHA_INI) {
-      const safe = FECHA_INI.includes(" ") ? FECHA_INI.replace(" ", "T") : FECHA_INI;
-      const el = document.getElementById("fecha_in"); if (el) el.value = safe;
-    }
-
-    const id = document.getElementById("idllamada")?.value || crypto.randomUUID();
-    const idEl = document.getElementById("idllamada"); if (idEl) idEl.value = id;
-
-    if ((NUMERO_IN || document.getElementById("numero_in")?.value) &&
-        (NOMBRE_AGENTE || document.getElementById("iduser")?.value) &&
-        (NOMBRE_GRUPO || document.getElementById("grupo_cola")?.value) &&
-        (FECHA_INI || document.getElementById("fecha_in")?.value)) {
-      await crearLlamadaOut({
-        id_llamada: id,
-        telefono_llamada: NUMERO_IN || document.getElementById("numero_in")?.value,
-        agente: NOMBRE_AGENTE || document.getElementById("iduser")?.value,
-        cola: NOMBRE_GRUPO || document.getElementById("grupo_cola")?.value,
-        fecha_inicio: FECHA_INI || document.getElementById("fecha_in")?.value
+    tbody.querySelectorAll("button[data-del]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const i = Number(e.currentTarget.getAttribute("data-del"));
+        if (!Number.isNaN(i)) { PENDING_ALERTS.splice(i, 1); renderGestiones(); }
       });
+    });
+  }
+
+  // ================== PREFILL URL + CREAR ==================
+  async function prefillFromURLAndCreate() {
+    const id_llamada       = getParam("id_llamada");
+    const telefono_llamada = getParam("telefono_llamada");
+    const agente           = getParam("agente");
+    const cola             = getParam("cola");
+    const fecha_inicio     = getParam("fecha_inicio");
+
+    if (id_llamada) byId("idllamada").value = id_llamada;
+    if (telefono_llamada) byId("numero_in").value = telefono_llamada;
+    if (agente) byId("iduser").value = agente;
+    if (cola) byId("grupo_cola").value = cola;
+    if (fecha_inicio) byId("fecha_in").value = fecha_inicio.includes(" ")?fecha_inicio.replace(" ","T"):fecha_inicio;
+
+    if (!byId("idllamada").value) byId("idllamada").value = crypto.randomUUID();
+    if (!byId("iduser").value) byId("iduser").value = "AG001";
+    if (!byId("fecha_in").value) byId("fecha_in").value = toLocalInputDateTime(new Date());
+
+    const canCreate =
+      byId("idllamada").value &&
+      byId("numero_in").value &&
+      byId("iduser").value &&
+      byId("grupo_cola").value &&
+      byId("fecha_in").value;
+
+    if (canCreate) {
+      try {
+        const payload = {
+          id_llamada: byId("idllamada").value,
+          telefono_llamada: byId("numero_in").value,
+          agente: byId("iduser").value,
+          cola: byId("grupo_cola").value,
+          fecha_inicio: byId("fecha_in").value.replace(" ","T")
+        };
+        const json = await crearLlamadaSaliente(payload);
+        if (json && json.codigo_llamada) {
+          window.COD_LLAMADA_OUT = json.codigo_llamada;
+          byId("idllamada").value = json.codigo_llamada;
+        } else {
+          window.COD_LLAMADA_OUT = payload.id_llamada;
+        }
+        toastEstado(true, "Llamada creada", "Error al crear llamada");
+      } catch (err) {
+        console.warn("CrearLlamadaSaliente:", err);
+        toastEstado(false, "", "Error al crear llamada");
+      }
     }
   }
 
-  /* ================== INIT ================== */
+  // ================== INIT & EVENTOS ==================
   document.addEventListener("DOMContentLoaded", () => {
-    // inputs base
-    if (document.getElementById("idllamada") && !document.getElementById("idllamada").value)
-      document.getElementById("idllamada").value = crypto.randomUUID();
-    if (document.getElementById("iduser") && !document.getElementById("iduser").value)
-      document.getElementById("iduser").value = "asesor-demo-001";
-    if (document.getElementById("fecha_in") && !document.getElementById("fecha_in").value)
-      document.getElementById("fecha_in").value = toLocalInputDateTime(new Date());
+    frm = byId("frm");
 
-    // combos locales (sin llamadas a catálogos)
-    llenarSelectLocal("accion_llamada", ACCIONES_SALIENTE, "id", "nombre", "Seleccione acción");
-    llenarSelectLocal("estado_llamada_main", ESTADOS_LLAMADA, "id", "nombre", "Seleccione estado…");
-
-    // modal gestión
-    document.getElementById("btnGestion")?.addEventListener("click", () => { prefillGestion(); openGestion(); });
-    document.getElementById("cancelGestion")?.addEventListener("click", (e) => { e.preventDefault(); closeGestion(); });
-    document.getElementById("btnAddGestion")?.addEventListener("click", (e) => {
+    // Botones del modal
+    byId("btnGestion")?.addEventListener("click", () => { prefillGestion(); openGestion(); });
+    byId("closeGestion")?.addEventListener("click", () => closeGestion());
+    byId("cancelGestion")?.addEventListener("click", () => closeGestion());
+    byId("btnAddGestion")?.addEventListener("click", (e) => {
       e.preventDefault();
       const a = buildAlertaFromModal();
       if (!a.codigo_llamada) return alert("Falta ID LLAMADA");
@@ -305,48 +291,66 @@ https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
       if (!a.id_estado_alerta) return alert("Seleccione ESTADO DE ALERTA");
       PENDING_ALERTS.push(a);
       renderGestiones();
-      closeGestion(); // opcional
+      closeGestion();
     });
-    document.getElementById("saveGestion")?.addEventListener("click", (e) => { e.preventDefault(); closeGestion(); });
+    byId("saveGestion")?.addEventListener("click", (e) => { e.preventDefault(); closeGestion(); });
 
-    // submit del formulario principal
-    document.getElementById("frm")?.addEventListener("submit", async (e) => {
+    // Submit principal: Actualiza llamada y luego envía TODAS las alertas
+    frm?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const selIntento = document.getElementById("intento_alerta");
-      if (!document.getElementById("dni")?.value.trim()) return alert("Ingrese DNI.");
+
+      if (!byId("dni").value.trim()) return alert("Ingrese DNI.");
+      const selIntento = byId("intento_alerta");
       if (!selIntento?.value) return alert("Seleccione INTENTO ALERTA (1, 2 o 3).");
 
-      const fechaFin = new Date();
-      if (document.getElementById("fecha_fin")) document.getElementById("fecha_fin").value = toLocalInputDateTime(fechaFin);
+      const COD_LLAMADA_OUT = (window.COD_LLAMADA_OUT && String(window.COD_LLAMADA_OUT)) || byId("idllamada").value.trim();
 
-      const COD_LLAMADA_OUT =
-        (window.COD_LLAMADA_OUT && String(window.COD_LLAMADA_OUT)) ||
-        document.getElementById("idllamada")?.value.trim();
+      try {
+        await actualizarLlamadaSaliente({
+          codigo_llamada: COD_LLAMADA_OUT,
+          fecha_fin: new Date().toISOString(),
+          nombre_cliente: byId("nombre_cliente").value || null,
+          telefono_cliente: byId("telefono2").value || null,
+          correo_cliente: byId("correo").value || null,
+          fecha_nacimiento_cliente: byId("fecha_nacimiento").value || null,
+          direccion_cliente: byId("direccion").value || null,
+          observaciones: byId("observaciones").value || null,
+          id_detalle_llamada: byId("sub_accion_llamada").value ? Number(byId("sub_accion_llamada").value) : null,
+          id_estado_llamada: byId("detalle_validacion").value ? Number(byId("detalle_validacion").value) : null,
+          numero_intentos: Number(selIntento.value || 0)
+        });
+      } catch (err) {
+        console.warn("ActualizarLlamadaSaliente:", err);
+        return alert("No se pudo actualizar la llamada (ver consola).");
+      }
 
-      await terminarLlamadaOut({
-        COD_LLAMADA_OUT,
-        FECHA_FIN: new Date(),
-        NOMBRE_CLIENTE: document.getElementById("nombre_cliente")?.value.trim(),
-        TELEFONO2: document.getElementById("telefono2")?.value.trim(),
-        CORREO: document.getElementById("correo")?.value.trim(),
-        DNI_2: document.getElementById("dni")?.value.trim(),
-        FECHA_NACIMIENTO: document.getElementById("fecha_nacimiento")?.value || null,
-        DIRECCION: document.getElementById("direccion")?.value.trim(),
-        OBSERVACIONES: document.getElementById("observaciones")?.value.trim(),
-        ID_FRAU_TIPO_VALIDACION: document.getElementById("detalle_validacion")?.value || null,
-        ID_FRAU_DETALLE_SUB_ACCION_LLAMADA: document.getElementById("sub_accion_llamada")?.value || null,
-        NRO_INTENTO: Number(selIntento?.value || 1)
-      });
+      // Enviar todas las alertas apiladas
+      let okCount = 0;
+      if (PENDING_ALERTS.length) {
+        const results = await Promise.allSettled(PENDING_ALERTS.map(a => crearAlerta(a)));
+        results.forEach((r, i) => {
+          if (r.status === "fulfilled") { okCount++; PENDING_ALERTS[i]._status = "OK"; }
+          else                           { PENDING_ALERTS[i]_status = "ERROR"; }
+        });
+        renderGestiones();
+        alert(`Alertas enviadas: ${okCount}/${PENDING_ALERTS.length}`);
+        if (okCount === PENDING_ALERTS.length) { PENDING_ALERTS.length = 0; renderGestiones(); }
+      }
 
-      const r = await enviarAlertasPendientes();
-      if (r.total) alert(`Alertas enviadas: ${r.okCount}/${r.total}`);
-      if (r.ok) { PENDING_ALERTS.length = 0; renderGestiones(); }
-
+      toastEstado(true, "Guardado correctamente", "Error al guardar");
       alert("Registro guardado.");
     });
 
-    // prefill por URL y creación automática
-    prefillFromURLAndCreate();
+    // ========== ARRANQUE: login -> crear llamada por URL ==========
+    (async () => {
+      try {
+        await ensureAuth();                  // hace login primero
+        await prefillFromURLAndCreate();     // y luego crea la llamada
+      } catch (e) {
+        console.warn("Init:", e);
+        alert("No se pudo autenticar. Revisa usuario/contraseña o CORS/red.");
+      }
+    })();
   });
 })();
 </script>
