@@ -1,3 +1,352 @@
 file:///C:/Users/alejs/Desktop/frontForum/salida.html?NOMBRE_AGENTE=Juan%20P%C3%A9rez&NUMERO_IN=51987654321&DNI=12345678&NOMBRE_GRUPO_COLA=SOPORTE%20FRAUDE&FECHA_INI=2025-10-25%2021:55:29.033
 
 https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
+
+
+<script>
+(() => {
+  /* ================== CONFIG ================== */
+  const API_BASE = "https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api";
+  // Si tus APIs requieren Authorization, pega aquí el token (o déjalo vacío si no aplica)
+  const AUTH_TOKEN = ""; // "eyJhbGciOi..."  ← opcional
+
+  /* Maestros locales (solo para la UI; no se llaman APIs de catálogo) */
+  const ACCIONES_SALIENTE = [
+    { id: 1, nombre: "CONTACTADO" },
+    { id: 2, nombre: "NO CONTESTA" },
+    { id: 3, nombre: "BUZÓN" }
+  ];
+  const ESTADOS_LLAMADA = [
+    { id: 1, nombre: "Concluida" },
+    { id: 2, nombre: "En proceso" },
+    { id: 3, nombre: "Abandonada" }
+  ];
+  const ESTADOS_ALERTA = [
+    { id: 1, nombre: "Nueva" },
+    { id: 2, nombre: "En revisión" },
+    { id: 3, nombre: "Resuelta" }
+  ];
+
+  /* ================== HELPERS ================== */
+  const pad = (n) => String(n).padStart(2, "0");
+  const toLocalInputDateTime = (d = new Date()) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  function getParam(k) {
+    const sp = new URLSearchParams(location.search);
+    const v = sp.get(k) || sp.get("@" + k) || sp.get(k.toUpperCase()) || sp.get(k.toLowerCase());
+    return v ? decodeURIComponent(String(v).replace(/\+/g, " ")) : "";
+  }
+
+  function hhmmss(d) {
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  /* ================== FETCH WRAPPER ================== */
+  async function fetchJson(url, opts = {}) {
+    const headers = { ...(opts.headers || {}) };
+    if (!headers["Content-Type"] && opts.method && opts.method !== "GET") {
+      headers["Content-Type"] = "application/json";
+    }
+    if (AUTH_TOKEN) headers["Authorization"] = "Bearer " + AUTH_TOKEN;
+
+    const res = await fetch(url, { ...opts, headers });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} - ${url}\n${t}`);
+    }
+    return res.json().catch(() => ({}));
+  }
+
+  /* ================== ENDPOINTS QUE SÍ USAMOS ================== */
+  async function crearLlamadaOut(bodyInput = {}) {
+    const payload = {
+      id_llamada: (bodyInput.id_llamada ?? document.getElementById("idllamada")?.value ?? "").trim(),
+      telefono_llamada: (bodyInput.telefono_llamada ?? document.getElementById("numero_in")?.value ?? "").trim(),
+      agente: (bodyInput.agente ?? document.getElementById("iduser")?.value ?? "").trim(),
+      cola: (bodyInput.cola ?? document.getElementById("grupo_cola")?.value ?? "").trim(),
+      fecha_inicio: (bodyInput.fecha_inicio ?? document.getElementById("fecha_in")?.value ?? "").replace(" ", "T")
+    };
+
+    try {
+      const json = await fetchJson(`${API_BASE}/Llamada/CrearLlamadaSaliente`, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      if (json && json.codigo_llamada) {
+        window.COD_LLAMADA_OUT = json.codigo_llamada;
+        const id = document.getElementById("idllamada"); if (id) id.value = json.codigo_llamada;
+      } else {
+        window.COD_LLAMADA_OUT = payload.id_llamada;
+      }
+      const pill = document.getElementById("statusPill");
+      if (pill) { pill.className = "pill ok"; pill.innerHTML = "<strong>Estado:</strong> Llamada creada"; }
+      return json;
+    } catch (err) {
+      console.warn("CrearLlamadaSaliente error:", err);
+      const pill = document.getElementById("statusPill");
+      if (pill) { pill.className = "pill warn"; pill.innerHTML = "<strong>Estado:</strong> Error al crear llamada"; }
+      alert("No se pudo crear la llamada.\n" + err.message);
+      return null;
+    }
+  }
+
+  async function terminarLlamadaOut(payload) {
+    const body = {
+      codigo_llamada: payload.COD_LLAMADA_OUT,
+      fecha_fin: new Date(payload.FECHA_FIN || new Date()).toISOString(),
+      nombre_cliente: payload.NOMBRE_CLIENTE || null,
+      telefono_cliente: payload.TELEFONO2 || null,
+      correo_cliente: payload.CORREO || null,
+      fecha_nacimiento_cliente: payload.FECHA_NACIMIENTO || null,
+      direccion_cliente: payload.DIRECCION || null,
+      observaciones: payload.OBSERVACIONES || null,
+      id_detalle_llamada: payload.ID_FRAU_DETALLE_SUB_ACCION_LLAMADA ?? null,
+      id_estado_llamada: payload.ID_FRAU_TIPO_VALIDACION ?? null,
+      numero_intentos: payload.NRO_INTENTO ?? 0
+    };
+    try {
+      const json = await fetchJson(`${API_BASE}/Llamada/ActualizarLlamadaSaliente`, {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+      return json;
+    } catch (e) {
+      console.warn("ActualizarLlamadaSaliente error:", e);
+      alert("No se pudo actualizar la llamada.\n" + e.message);
+      return null;
+    }
+  }
+
+  async function crearAlerta(body) {
+    return fetchJson(`${API_BASE}/Alerta/CrearAlerta`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+  }
+
+  async function actualizarEstadoAlerta(body) {
+    // { codigo_llamada, codigo_alerta, id_estado_alerta }
+    return fetchJson(`${API_BASE}/Alerta/ActualizarEstadoAlerta`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+  }
+
+  /* ================== UI: CATÁLOGOS LOCALES ================== */
+  function llenarSelectLocal(selId, items, valueField = "id", textField = "nombre", first = "Seleccione…") {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML = `<option value="">${first}</option>`;
+    (items || []).forEach(x => {
+      const opt = document.createElement("option");
+      opt.value = x[valueField];
+      opt.textContent = x[textField];
+      sel.appendChild(opt);
+    });
+  }
+
+  /* ================== MODAL GESTIÓN / ALERTAS ================== */
+  const PENDING_ALERTS = []; // cola para crear en lote
+
+  const bkGestion = () => document.getElementById("bkGestion");
+  const openGestion = () => bkGestion()?.classList.add("show");
+  const closeGestion = () => bkGestion()?.classList.remove("show");
+
+  function prefillGestion() {
+    const get = id => document.getElementById(id);
+    if (get("mg_idllamada")) get("mg_idllamada").value = get("idllamada")?.value || "";
+    if (get("mg_iduser")) get("mg_iduser").value = get("iduser")?.value || "";
+    if (get("mg_dni")) get("mg_dni").value = get("dni")?.value || "";
+    if (get("mg_identity")) get("mg_identity").value = "";
+    if (get("mg_fechaenvio")) get("mg_fechaenvio").value = toLocalInputDateTime(new Date());
+    // estados de alerta locales
+    llenarSelectLocal("mg_estadoalerta", ESTADOS_ALERTA, "id", "nombre", "Seleccione estado de alerta…");
+    // autoselecciona la primera real
+    const sel = get("mg_estadoalerta");
+    if (sel && sel.options.length > 1) sel.selectedIndex = 1;
+  }
+
+  function buildAlertaFromModal() {
+    const idLlamada = (document.getElementById("mg_idllamada")?.value || "").trim();
+    const idUser = (document.getElementById("mg_iduser")?.value || "").trim();
+    const dni = (document.getElementById("mg_dni")?.value || "").replace(/[^\d]/g, "");
+    const identity = (document.getElementById("mg_identity")?.value || "").trim();
+    const fechaIn = document.getElementById("mg_fechaenvio")?.value;
+    const selEstado = document.getElementById("mg_estadoalerta");
+    const idEstado = selEstado ? Number(selEstado.value) : null;
+    const txtEstado = selEstado?.options[selEstado.selectedIndex]?.textContent || "";
+    const montoStr = (document.getElementById("mg_monto")?.value || "").trim();
+    const monto = montoStr ? Number(montoStr.replace(",", ".")) : null;
+
+    const d = fechaIn ? new Date(String(fechaIn).replace(" ", "T")) : new Date();
+    const iso = d.toISOString();
+
+    return {
+      // payload exacto de CrearAlerta
+      codigo_llamada: idLlamada,
+      identidad: identity,
+      fecha_envio: iso,
+      hora_envio: hhmmss(d),
+      fecha_transaccion: iso,
+      hora_transaccion: hhmmss(d),
+      nro_documento: dni,
+      nro_cuenta: "",
+      nro_tarjeta: "",
+      tipo_transaccion: "",
+      importe_transaccion: monto,
+      nro_giro: "",
+      cuenta_destino: "",
+      documento_beneficiario: "",
+      nombre_beneficiario: "",
+      codigo_servicio_celular: "",
+      indicador_alerta: "",
+      canal: "WEB",
+      id_estado_alerta: idEstado,
+      // campos solo UI
+      _id_user: idUser,
+      _estado_text: txtEstado,
+      _status: "Pendiente"
+    };
+  }
+
+  function renderGestiones() {
+    const tbd = document.querySelector("#gestionesTable tbody") || document.querySelector("#attemptsTable tbody");
+    if (!tbd) return;
+    tbd.innerHTML = "";
+    for (const g of PENDING_ALERTS) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${g.codigo_llamada}</td>
+        <td>${g._id_user || "—"}</td>
+        <td>${g.nro_documento || "—"}</td>
+        <td>${g.identidad || "—"}</td>
+        <td>${new Date(g.fecha_envio).toLocaleString()}</td>
+        <td>${g._estado_text || g.id_estado_alerta || ""}</td>
+        <td>${g.importe_transaccion ?? ""}</td>
+        <td>${g._status || "Pendiente"}</td>`;
+      tbd.appendChild(tr);
+    }
+  }
+
+  async function enviarAlertasPendientes() {
+    if (!PENDING_ALERTS.length) return { ok: true, total: 0, okCount: 0 };
+    const results = await Promise.allSettled(PENDING_ALERTS.map(a => crearAlerta(a)));
+    let okCount = 0;
+    results.forEach((r, i) => {
+      if (r.status === "fulfilled") {
+        okCount++;
+        PENDING_ALERTS[i]._status = "OK";
+        PENDING_ALERTS[i]._codigo_alerta = r.value?.codigo_alerta || "";
+      } else {
+        PENDING_ALERTS[i]._status = "ERROR";
+      }
+    });
+    renderGestiones();
+    return { ok: okCount === PENDING_ALERTS.length, total: PENDING_ALERTS.length, okCount };
+  }
+
+  /* ================== PREFILL + CREAR LLAMADA ================== */
+  async function prefillFromURLAndCreate() {
+    const NOMBRE_AGENTE   = getParam("NOMBRE_AGENTE") || getParam("agente");
+    const NUMERO_IN       = getParam("NUMERO_IN") || getParam("telefono_llamada");
+    const DNI             = getParam("DNI");
+    const NOMBRE_GRUPO    = getParam("NOMBRE_GRUPO_COLA") || getParam("cola");
+    const FECHA_INI       = getParam("FECHA_INI") || getParam("fecha_inicio");
+
+    if (NOMBRE_AGENTE) { const el = document.getElementById("iduser"); if (el) el.value = NOMBRE_AGENTE; }
+    if (NUMERO_IN) { const el = document.getElementById("numero_in"); if (el) el.value = NUMERO_IN; }
+    if (DNI) { const el = document.getElementById("dni"); if (el) el.value = DNI; }
+    if (NOMBRE_GRUPO) { const el = document.getElementById("grupo_cola"); if (el) el.value = NOMBRE_GRUPO; }
+    if (FECHA_INI) {
+      const safe = FECHA_INI.includes(" ") ? FECHA_INI.replace(" ", "T") : FECHA_INI;
+      const el = document.getElementById("fecha_in"); if (el) el.value = safe;
+    }
+
+    const id = document.getElementById("idllamada")?.value || crypto.randomUUID();
+    const idEl = document.getElementById("idllamada"); if (idEl) idEl.value = id;
+
+    if ((NUMERO_IN || document.getElementById("numero_in")?.value) &&
+        (NOMBRE_AGENTE || document.getElementById("iduser")?.value) &&
+        (NOMBRE_GRUPO || document.getElementById("grupo_cola")?.value) &&
+        (FECHA_INI || document.getElementById("fecha_in")?.value)) {
+      await crearLlamadaOut({
+        id_llamada: id,
+        telefono_llamada: NUMERO_IN || document.getElementById("numero_in")?.value,
+        agente: NOMBRE_AGENTE || document.getElementById("iduser")?.value,
+        cola: NOMBRE_GRUPO || document.getElementById("grupo_cola")?.value,
+        fecha_inicio: FECHA_INI || document.getElementById("fecha_in")?.value
+      });
+    }
+  }
+
+  /* ================== INIT ================== */
+  document.addEventListener("DOMContentLoaded", () => {
+    // inputs base
+    if (document.getElementById("idllamada") && !document.getElementById("idllamada").value)
+      document.getElementById("idllamada").value = crypto.randomUUID();
+    if (document.getElementById("iduser") && !document.getElementById("iduser").value)
+      document.getElementById("iduser").value = "asesor-demo-001";
+    if (document.getElementById("fecha_in") && !document.getElementById("fecha_in").value)
+      document.getElementById("fecha_in").value = toLocalInputDateTime(new Date());
+
+    // combos locales (sin llamadas a catálogos)
+    llenarSelectLocal("accion_llamada", ACCIONES_SALIENTE, "id", "nombre", "Seleccione acción");
+    llenarSelectLocal("estado_llamada_main", ESTADOS_LLAMADA, "id", "nombre", "Seleccione estado…");
+
+    // modal gestión
+    document.getElementById("btnGestion")?.addEventListener("click", () => { prefillGestion(); openGestion(); });
+    document.getElementById("cancelGestion")?.addEventListener("click", (e) => { e.preventDefault(); closeGestion(); });
+    document.getElementById("btnAddGestion")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      const a = buildAlertaFromModal();
+      if (!a.codigo_llamada) return alert("Falta ID LLAMADA");
+      if (!a.nro_documento) return alert("Falta DNI");
+      if (!a.id_estado_alerta) return alert("Seleccione ESTADO DE ALERTA");
+      PENDING_ALERTS.push(a);
+      renderGestiones();
+      closeGestion(); // opcional
+    });
+    document.getElementById("saveGestion")?.addEventListener("click", (e) => { e.preventDefault(); closeGestion(); });
+
+    // submit del formulario principal
+    document.getElementById("frm")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const selIntento = document.getElementById("intento_alerta");
+      if (!document.getElementById("dni")?.value.trim()) return alert("Ingrese DNI.");
+      if (!selIntento?.value) return alert("Seleccione INTENTO ALERTA (1, 2 o 3).");
+
+      const fechaFin = new Date();
+      if (document.getElementById("fecha_fin")) document.getElementById("fecha_fin").value = toLocalInputDateTime(fechaFin);
+
+      const COD_LLAMADA_OUT =
+        (window.COD_LLAMADA_OUT && String(window.COD_LLAMADA_OUT)) ||
+        document.getElementById("idllamada")?.value.trim();
+
+      await terminarLlamadaOut({
+        COD_LLAMADA_OUT,
+        FECHA_FIN: new Date(),
+        NOMBRE_CLIENTE: document.getElementById("nombre_cliente")?.value.trim(),
+        TELEFONO2: document.getElementById("telefono2")?.value.trim(),
+        CORREO: document.getElementById("correo")?.value.trim(),
+        DNI_2: document.getElementById("dni")?.value.trim(),
+        FECHA_NACIMIENTO: document.getElementById("fecha_nacimiento")?.value || null,
+        DIRECCION: document.getElementById("direccion")?.value.trim(),
+        OBSERVACIONES: document.getElementById("observaciones")?.value.trim(),
+        ID_FRAU_TIPO_VALIDACION: document.getElementById("detalle_validacion")?.value || null,
+        ID_FRAU_DETALLE_SUB_ACCION_LLAMADA: document.getElementById("sub_accion_llamada")?.value || null,
+        NRO_INTENTO: Number(selIntento?.value || 1)
+      });
+
+      const r = await enviarAlertasPendientes();
+      if (r.total) alert(`Alertas enviadas: ${r.okCount}/${r.total}`);
+      if (r.ok) { PENDING_ALERTS.length = 0; renderGestiones(); }
+
+      alert("Registro guardado.");
+    });
+
+    // prefill por URL y creación automática
+    prefillFromURLAndCreate();
+  });
+})();
+</script>
