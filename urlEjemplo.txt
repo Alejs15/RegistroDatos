@@ -2,45 +2,17 @@ file:///C:/Users/alejs/Desktop/frontForum/salida.html?NOMBRE_AGENTE=Juan%20P%C3%
 
 https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
 
-// --- Reemplaza COMPLETO tu enviarAlertasPendientes() por esto ---
-async function enviarAlertasPendientes() {
-  if (!PENDING_ALERTS.length) return { ok: true, total: 0, okCount: 0 };
-
-  const results = await Promise.allSettled(PENDING_ALERTS.map(a => crearAlerta(a)));
-
-  let okCount = 0;
-  results.forEach((r, i) => {
-    if (r.status === 'fulfilled') {
-      okCount++;
-      PENDING_ALERTS[i]._status = 'OK';
-      PENDING_ALERTS[i]._codigo_alerta = r.value?.codigo_alerta || '';
-    } else {
-      PENDING_ALERTS[i]._status = 'ERROR';
-    }
-  });
-
-  renderGestiones();
-  return { ok: okCount === PENDING_ALERTS.length, total: PENDING_ALERTS.length, okCount };
-}
-
-
-
 <script>
 (() => {
   // ================== CONFIG ==================
   const API_BASE = "https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api";
 
-  // Credenciales por defecto (puedes sobreescribirlas vía URL ?user=&pass=)
-  const LOGIN_USER = new URLSearchParams(location.search).get("user") || "lvalera";
-  const LOGIN_PASS = new URLSearchParams(location.search).get("pass") || "12345678";
-
   // ================== AUTH ==================
-  let AUTH_HEADERS = {};       // se completa tras login
-  let _authToken = null;       // guarda el JWT/Token
-  let _isLoggingIn = null;     // evita carreras de login concurrentes
+  let AUTH_HEADERS = {};
+  let _authToken = null;
+  let _isLoggingIn = null;
 
   function _extractToken(json) {
-    // Acepta varios formatos posibles de respuesta
     if (!json || typeof json !== "object") return null;
     return (
       json.token ||
@@ -53,16 +25,15 @@ async function enviarAlertasPendientes() {
   }
 
   async function login() {
-    if (_isLoggingIn) return _isLoggingIn;  // reusa la promesa en curso
-
+    if (_isLoggingIn) return _isLoggingIn;
     const url = `${API_BASE}/Autenticacion/Autenticar`;
-    const body = { usuario: LOGIN_USER, contrasena: LOGIN_PASS };
+    const body = { usuario: "lvalera", contrasena: "12345678" };
 
     _isLoggingIn = (async () => {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`Login HTTP ${res.status}`);
       const json = await res.json().catch(() => ({}));
@@ -88,41 +59,37 @@ async function enviarAlertasPendientes() {
 
   // fetch con Authorization + reintento en 401
   async function fetchJson(url, opts = {}, _retried = false) {
-    await ensureAuth(); // asegura token cargado
-
+    await ensureAuth();
     const headers = {
       "Content-Type": "application/json",
       ...(opts.headers || {}),
-      ...AUTH_HEADERS
+      ...AUTH_HEADERS,
     };
-
     const res = await fetch(url, { ...opts, headers });
 
     if (res.status === 401 && !_retried) {
-      // token expiró o inválido: reloguea y reintenta una vez
       _authToken = null;
       AUTH_HEADERS = {};
       await login();
       return fetchJson(url, opts, true);
     }
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} - ${url}`);
-    }
+    if (!res.ok) throw new Error(`HTTP ${res.status} - ${url}`);
     try { return await res.json(); } catch { return {}; }
   }
 
   // ================== HELPERS UI ==================
   const pad = (n) => String(n).padStart(2, "0");
   const toLocalInputDateTime = (d = new Date()) =>
-    `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const hhmmss = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   const byId = (id) => document.getElementById(id);
+
   function getParam(k) {
     const sp = new URLSearchParams(location.search);
-    const v = sp.get(k) || sp.get("@"+k) || sp.get(k.toUpperCase()) || sp.get(k.toLowerCase());
+    const v = sp.get(k) || sp.get("@" + k) || sp.get(k.toUpperCase()) || sp.get(k.toLowerCase());
     return v ? decodeURIComponent(String(v).replace(/\+/g, " ")) : "";
   }
+
   function toastEstado(ok, msgOk, msgErr) {
     const pill = byId("statusPill");
     if (!pill) return;
@@ -134,68 +101,77 @@ async function enviarAlertasPendientes() {
   async function crearLlamadaSaliente(body) {
     return fetchJson(`${API_BASE}/Llamada/CrearLlamadaSaliente`, {
       method: "POST",
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
   }
   async function actualizarLlamadaSaliente(body) {
     return fetchJson(`${API_BASE}/Llamada/ActualizarLlamadaSaliente`, {
       method: "POST",
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
   }
   async function crearAlerta(body) {
     return fetchJson(`${API_BASE}/Alerta/CrearAlerta`, {
       method: "POST",
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
   }
 
   // ================== ESTADO GLOBAL ==================
-  const PENDING_ALERTS = []; // alertas apiladas
+  const PENDING_ALERTS = [];
   let frm;
 
   // ================== MODAL "Datos de gestión" ==================
   function ensureMgEstadosOptions() {
     const sel = byId("mg_estadoalerta");
     if (!sel) return;
-    const hasReal = Array.from(sel.options).some(o => o.value && o.value !== "" && o.textContent !== "Cargando…");
+    const hasReal = Array.from(sel.options).some(
+      (o) => o.value && o.value !== "" && o.textContent !== "Cargando…"
+    );
     if (!hasReal) {
       sel.innerHTML = "";
-      [["","Seleccione estado de alerta…"],["1","Pendiente"],["2","Enviado"]].forEach(([v,t])=>{
+      [
+        ["", "Seleccione estado de alerta…"],
+        ["1", "Pendiente"],
+        ["2", "Enviado"],
+      ].forEach(([v, t]) => {
         const opt = document.createElement("option");
-        opt.value = v; opt.textContent = t; sel.appendChild(opt);
+        opt.value = v;
+        opt.textContent = t;
+        sel.appendChild(opt);
       });
     }
   }
+
   function prefillGestion() {
     ensureMgEstadosOptions();
     byId("mg_idllamada").value = byId("idllamada")?.value || "";
-    byId("mg_iduser").value    = byId("iduser")?.value || "";
-    byId("mg_dni").value       = byId("dni")?.value || "";
-    byId("mg_identity").value  = "";
+    byId("mg_iduser").value = byId("iduser")?.value || "";
+    byId("mg_dni").value = byId("dni")?.value || "";
+    byId("mg_identity").value = "";
     byId("mg_fechaenvio").value = toLocalInputDateTime(new Date());
   }
-  function openGestion()  { byId("bkGestion")?.classList.add("show"); }
+  function openGestion() { byId("bkGestion")?.classList.add("show"); }
   function closeGestion() { byId("bkGestion")?.classList.remove("show"); }
 
   function buildAlertaFromModal() {
     const idLlamada = (byId("mg_idllamada").value || "").trim();
-    const idUser    = (byId("mg_iduser").value || "").trim(); // solo UI
-    const dni       = (byId("mg_dni").value || "").replace(/[^\d]/g, "");
-    const identity  = (byId("mg_identity").value || "").trim();
-    const fechaVal  = byId("mg_fechaenvio").value;
-    const sel       = byId("mg_estadoalerta");
-    const idEstado  = sel ? Number(sel.value) : null;
+    const idUser = (byId("mg_iduser").value || "").trim(); // solo UI
+    const dni = (byId("mg_dni").value || "").replace(/[^\d]/g, "");
+    const identity = (byId("mg_identity").value || "").trim();
+    const fechaVal = byId("mg_fechaenvio").value;
+    const sel = byId("mg_estadoalerta");
+    const idEstado = sel ? Number(sel.value) : null;
     const txtEstado = sel?.options[sel.selectedIndex]?.textContent || "";
-    const montoStr  = (byId("mg_monto").value || "").trim();
-    const monto     = montoStr ? String(Number(montoStr.replace(",", "."))) : "";
+    const montoStr = (byId("mg_monto").value || "").trim();
+    const monto = montoStr ? String(Number(montoStr.replace(",", "."))) : "";
 
-    const d = fechaVal ? new Date(String(fechaVal).replace(" ","T")) : new Date();
+    const d = fechaVal ? new Date(String(fechaVal).replace(" ", "T")) : new Date();
     const iso = d.toISOString();
     const hora = hhmmss(d);
 
     return {
-      // Payload EXACTO para /Alerta/CrearAlerta
+      // Payload EXACTO /Alerta/CrearAlerta
       codigo_llamada: idLlamada,
       identidad: identity,
       fecha_envio: iso,
@@ -216,10 +192,10 @@ async function enviarAlertasPendientes() {
       canal: "WEB",
       id_estado_alerta: idEstado,
 
-      // Solo UI
+      // Solo para la UI
       _id_user: idUser,
       _estado_text: txtEstado,
-      _status: "Pendiente"
+      _status: "Pendiente",
     };
   }
 
@@ -240,27 +216,33 @@ async function enviarAlertasPendientes() {
         <td><button class="btn ghost" type="button" data-del="${idx}">Eliminar</button></td>`;
       tbody.appendChild(tr);
     });
-    tbody.querySelectorAll("button[data-del]").forEach(btn => {
+    tbody.querySelectorAll("button[data-del]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         const i = Number(e.currentTarget.getAttribute("data-del"));
-        if (!Number.isNaN(i)) { PENDING_ALERTS.splice(i, 1); renderGestiones(); }
+        if (!Number.isNaN(i)) {
+          PENDING_ALERTS.splice(i, 1);
+          renderGestiones();
+        }
       });
     });
   }
 
   // ================== PREFILL URL + CREAR ==================
   async function prefillFromURLAndCreate() {
-    const id_llamada       = getParam("id_llamada");
+    const id_llamada = getParam("id_llamada");
     const telefono_llamada = getParam("telefono_llamada");
-    const agente           = getParam("agente");
-    const cola             = getParam("cola");
-    const fecha_inicio     = getParam("fecha_inicio");
+    const agente = getParam("agente");
+    const cola = getParam("cola");
+    const fecha_inicio = getParam("fecha_inicio");
 
     if (id_llamada) byId("idllamada").value = id_llamada;
     if (telefono_llamada) byId("numero_in").value = telefono_llamada;
     if (agente) byId("iduser").value = agente;
     if (cola) byId("grupo_cola").value = cola;
-    if (fecha_inicio) byId("fecha_in").value = fecha_inicio.includes(" ")?fecha_inicio.replace(" ","T"):fecha_inicio;
+    if (fecha_inicio)
+      byId("fecha_in").value = fecha_inicio.includes(" ")
+        ? fecha_inicio.replace(" ", "T")
+        : fecha_inicio;
 
     if (!byId("idllamada").value) byId("idllamada").value = crypto.randomUUID();
     if (!byId("iduser").value) byId("iduser").value = "AG001";
@@ -280,7 +262,7 @@ async function enviarAlertasPendientes() {
           telefono_llamada: byId("numero_in").value,
           agente: byId("iduser").value,
           cola: byId("grupo_cola").value,
-          fecha_inicio: byId("fecha_in").value.replace(" ","T")
+          fecha_inicio: byId("fecha_in").value.replace(" ", "T"),
         };
         const json = await crearLlamadaSaliente(payload);
         if (json && json.codigo_llamada) {
@@ -301,7 +283,7 @@ async function enviarAlertasPendientes() {
   document.addEventListener("DOMContentLoaded", () => {
     frm = byId("frm");
 
-    // Botones del modal
+    // Modal
     byId("btnGestion")?.addEventListener("click", () => { prefillGestion(); openGestion(); });
     byId("closeGestion")?.addEventListener("click", () => closeGestion());
     byId("cancelGestion")?.addEventListener("click", () => closeGestion());
@@ -317,7 +299,7 @@ async function enviarAlertasPendientes() {
     });
     byId("saveGestion")?.addEventListener("click", (e) => { e.preventDefault(); closeGestion(); });
 
-    // Submit principal: Actualiza llamada y luego envía TODAS las alertas
+    // Submit principal: Actualiza llamada y luego envía TODAS las alertas apiladas
     frm?.addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -325,7 +307,9 @@ async function enviarAlertasPendientes() {
       const selIntento = byId("intento_alerta");
       if (!selIntento?.value) return alert("Seleccione INTENTO ALERTA (1, 2 o 3).");
 
-      const COD_LLAMADA_OUT = (window.COD_LLAMADA_OUT && String(window.COD_LLAMADA_OUT)) || byId("idllamada").value.trim();
+      const COD_LLAMADA_OUT =
+        (window.COD_LLAMADA_OUT && String(window.COD_LLAMADA_OUT)) ||
+        byId("idllamada").value.trim();
 
       try {
         await actualizarLlamadaSaliente({
@@ -337,9 +321,13 @@ async function enviarAlertasPendientes() {
           fecha_nacimiento_cliente: byId("fecha_nacimiento").value || null,
           direccion_cliente: byId("direccion").value || null,
           observaciones: byId("observaciones").value || null,
-          id_detalle_llamada: byId("sub_accion_llamada").value ? Number(byId("sub_accion_llamada").value) : null,
-          id_estado_llamada: byId("detalle_validacion").value ? Number(byId("detalle_validacion").value) : null,
-          numero_intentos: Number(selIntento.value || 0)
+          id_detalle_llamada: byId("sub_accion_llamada").value
+            ? Number(byId("sub_accion_llamada").value)
+            : null,
+          id_estado_llamada: byId("detalle_validacion").value
+            ? Number(byId("detalle_validacion").value)
+            : null,
+          numero_intentos: Number(selIntento.value || 0),
         });
       } catch (err) {
         console.warn("ActualizarLlamadaSaliente:", err);
@@ -349,25 +337,32 @@ async function enviarAlertasPendientes() {
       // Enviar todas las alertas apiladas
       let okCount = 0;
       if (PENDING_ALERTS.length) {
-        const results = await Promise.allSettled(PENDING_ALERTS.map(a => crearAlerta(a)));
+        const results = await Promise.allSettled(PENDING_ALERTS.map((a) => crearAlerta(a)));
         results.forEach((r, i) => {
-          if (r.status === "fulfilled") { okCount++; PENDING_ALERTS[i]._status = "OK"; }
-          else                           { PENDING_ALERTS[i]_status = "ERROR"; }
+          if (r.status === "fulfilled") {
+            okCount++;
+            PENDING_ALERTS[i]._status = "OK";
+          } else {
+            PENDING_ALERTS[i]._status = "ERROR"; // <-- bug corregido
+          }
         });
         renderGestiones();
         alert(`Alertas enviadas: ${okCount}/${PENDING_ALERTS.length}`);
-        if (okCount === PENDING_ALERTS.length) { PENDING_ALERTS.length = 0; renderGestiones(); }
+        if (okCount === PENDING_ALERTS.length) {
+          PENDING_ALERTS.length = 0;
+          renderGestiones();
+        }
       }
 
       toastEstado(true, "Guardado correctamente", "Error al guardar");
       alert("Registro guardado.");
     });
 
-    // ========== ARRANQUE: login -> crear llamada por URL ==========
+    // Arranque: login -> crear llamada por URL
     (async () => {
       try {
-        await ensureAuth();                  // hace login primero
-        await prefillFromURLAndCreate();     // y luego crea la llamada
+        await ensureAuth();
+        await prefillFromURLAndCreate();
       } catch (e) {
         console.warn("Init:", e);
         alert("No se pudo autenticar. Revisa usuario/contraseña o CORS/red.");
