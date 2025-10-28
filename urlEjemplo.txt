@@ -2,6 +2,59 @@ file:///C:/Users/alejs/Desktop/frontForum/salida.html?NOMBRE_AGENTE=Juan%20P%C3%
 
 https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
 
+async function login() {
+  if (_isLoggingIn) return _isLoggingIn;
+
+  const url = `${API_BASE}/Autenticacion/Autenticar`;
+
+  // Los datos deben ir en formato x-www-form-urlencoded
+  const params = new URLSearchParams();
+  params.append("usuario", "lvalera");
+  params.append("contrasena", "12345678");
+
+  _isLoggingIn = (async () => {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: params.toString(),
+      credentials: "include" // por si usa cookies de sesión
+    });
+
+    const text = await res.text();
+    if (res.status === 415) throw new Error("El servidor no acepta JSON, usa form-urlencoded");
+    if (!res.ok) throw new Error(`Login HTTP ${res.status}: ${text}`);
+
+    let json = null;
+    try { json = JSON.parse(text); } catch {}
+    const token =
+      json?.token ||
+      json?.access_token ||
+      json?.jwt ||
+      json?.accessToken ||
+      json?.Token ||
+      null;
+
+    if (!token) {
+      console.log("Respuesta login:", text);
+      throw new Error("No se recibió token en Autenticar.");
+    }
+
+    _authToken = token;
+    AUTH_HEADERS = { Authorization: `Bearer ${_authToken}` };
+    return token;
+  })();
+
+  try {
+    return await _isLoggingIn;
+  } finally {
+    _isLoggingIn = null;
+  }
+}
+
+
+
 <script>
 (() => {
   // ================== CONFIG ==================
