@@ -1,1 +1,73 @@
 file:///C:/Users/alejs/Desktop/frontForum/salida.html?NOMBRE_AGENTE=Juan%20P%C3%A9rez&NUMERO_IN=51987654321&DNI=12345678&NOMBRE_GRUPO_COLA=SOPORTE%20FRAUDE&FECHA_INI=2025-10-25%2021:55:29.033
+
+using System.Text; // para Encoding.UTF8
+
+// ===== Helper: devuelve la carpeta de logs en el Escritorio o fallback =====
+private string GetLocalLogsFolder()
+{
+    try
+    {
+        // Escritorio del usuario actual (funciona aunque esté redirigido a OneDrive)
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (!string.IsNullOrWhiteSpace(desktop) && Directory.Exists(desktop))
+        {
+            return Path.Combine(desktop, "logs_exportaciones");
+        }
+    }
+    catch
+    {
+        // ignoramos y usamos fallback
+    }
+
+    // Fallback: carpeta "logs_exportaciones" al lado del ejecutable
+    return Path.Combine(Application.StartupPath, "logs_exportaciones");
+}
+
+// ===== Helper: asegura que la carpeta exista (idempotente) =====
+private void EnsureDirectory(string path)
+{
+    if (!Directory.Exists(path))
+        Directory.CreateDirectory(path);
+}
+
+// ===== Reemplazo completo de tu método =====
+private void CrearLogTxt(DateTime fechaInicio, DateTime fechaFin, string dni, string tipoExportacion)
+{
+    try
+    {
+        string direccionIP = Dns.GetHostAddresses(Dns.GetHostName())
+            .FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?.ToString() ?? "";
+        string nombrePC = Environment.MachineName;
+
+        string query = $"EXEC BuscarGrabacionesPorFechaYDNI_Prueba01 @FechaInicio='{fechaInicio:yyyy-MM-dd}', @FechaFin='{fechaFin:yyyy-MM-dd}', @DNI='{dni}'";
+
+        string log = $"FechaInicio: {fechaInicio:yyyy-MM-dd}\r\n" +
+                     $"FechaFin: {fechaFin:yyyy-MM-dd}\r\n" +
+                     $"DNI: {dni}\r\n" +
+                     $"DireccionIP: {direccionIP}\r\n" +
+                     $"NombrePC: {nombrePC}\r\n" +
+                     $"Fecha de Exportacion: [{DateTime.Now:yyyy-MM-dd HH:mm:ss}]\r\n" +
+                     $"Exportación: {tipoExportacion}\r\n" +
+                     $"Query: {query}\r\n";
+
+        // Carpeta local en Escritorio (o fallback)
+        string logsFolder = GetLocalLogsFolder();
+        EnsureDirectory(logsFolder);
+
+        // Nombre único por timestamp
+        string fechaHora = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        string logFileName = $"log_exportacion_{fechaHora}.txt";
+        string logPath = Path.Combine(logsFolder, logFileName);
+
+        // Escribir en UTF-8 (crea o sobreescribe si coincidiera el nombre)
+        File.WriteAllText(logPath, log, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        // (Opcional) Notifica dónde quedó el log
+        // MessageBox.Show($"Log guardado en:\r\n{logPath}", "Log creado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show("No se pudo crear el log local.\r\nDetalle: " + ex.Message,
+            "Error al crear log", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+}
