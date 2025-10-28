@@ -2,6 +2,28 @@ file:///C:/Users/alejs/Desktop/frontForum/salida.html?NOMBRE_AGENTE=Juan%20P%C3%
 
 https://formccenter.bn.com.pe/API_LLAMADAS_FRAUDES/api/Autenticacion/Autenticar
 
+// --- Reemplaza COMPLETO tu enviarAlertasPendientes() por esto ---
+async function enviarAlertasPendientes() {
+  if (!PENDING_ALERTS.length) return { ok: true, total: 0, okCount: 0 };
+
+  const results = await Promise.allSettled(PENDING_ALERTS.map(a => crearAlerta(a)));
+
+  let okCount = 0;
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      okCount++;
+      PENDING_ALERTS[i]._status = 'OK';
+      PENDING_ALERTS[i]._codigo_alerta = r.value?.codigo_alerta || '';
+    } else {
+      PENDING_ALERTS[i]._status = 'ERROR';
+    }
+  });
+
+  renderGestiones();
+  return { ok: okCount === PENDING_ALERTS.length, total: PENDING_ALERTS.length, okCount };
+}
+
+
 
 <script>
 (() => {
